@@ -1,141 +1,79 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Stress Lab | Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        body { font-family: 'JetBrains Mono', monospace; background-color: #0a0a0a; }
-        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .neon-text { text-shadow: 0 0 10px #00ff00; }
-        .progress-bar { transition: width 0.5s ease; }
-    </style>
-</head>
-<body class="text-gray-300 min-h-screen flex items-center justify-center p-4">
+<script>
+    const API_BASE = "https://bagmi.onrender.com";
+    let lastSent = 0;
+    let timer = null;
 
-    <div class="glass max-w-lg w-full rounded-2xl p-8 shadow-2xl">
-        <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-white mb-2"><i class="fas fa-microchip text-green-500 mr-2"></i>NET-STRESS <span class="text-green-500">V1</span></h1>
-            <p class="text-xs text-gray-500 uppercase tracking-widest">Advanced Network Load Simulator</p>
-        </div>
+    async function startTest() {
+        const ip = document.getElementById('ip').value;
+        const port = document.getElementById('port').value;
+        const players = document.getElementById('players').value;
+        const duration = document.getElementById('duration').value;
 
-        <div class="space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="text-xs font-bold text-gray-400">TARGET IP</label>
-                    <input type="text" id="ip" placeholder="1.1.1.1" class="w-full bg-black/50 border border-gray-700 rounded-lg p-3 mt-1 focus:border-green-500 outline-none transition">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-400">PORT</label>
-                    <input type="number" id="port" placeholder="80" class="w-full bg-black/50 border border-gray-700 rounded-lg p-3 mt-1 focus:border-green-500 outline-none transition">
-                </div>
-            </div>
+        if(!ip || !port || !players || !duration) return alert("All fields are required!");
 
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="text-xs font-bold text-gray-400">THREADS (PLAYERS)</label>
-                    <input type="number" id="players" placeholder="20" class="w-full bg-black/50 border border-gray-700 rounded-lg p-3 mt-1 focus:border-green-500 outline-none transition">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-400">DURATION (SEC)</label>
-                    <input type="number" id="duration" placeholder="60" class="w-full bg-black/50 border border-gray-700 rounded-lg p-3 mt-1 focus:border-green-500 outline-none transition">
-                </div>
-            </div>
+        // UI Reset
+        document.getElementById('statsPanel').classList.remove('hidden');
+        document.getElementById('launchBtn').disabled = true;
+        document.getElementById('launchBtn').innerText = "SYSTEM ACTIVE...";
+        document.getElementById('statusBadge').innerText = "RUNNING";
+        document.getElementById('statusBadge').className = "bg-green-900/50 text-green-400 text-[10px] px-2 py-1 rounded border border-green-500/50 animate-pulse";
 
-            <button onclick="startTest()" id="launchBtn" class="w-full bg-green-600 hover:bg-green-500 text-black font-bold py-4 rounded-lg transition transform active:scale-95 shadow-[0_0_20px_rgba(34,197,94,0.3)]">
-                <i class="fas fa-bolt mr-2"></i>LAUNCH SEQUENCE
-            </button>
-        </div>
-
-        <div id="statsPanel" class="mt-8 pt-8 border-t border-gray-800 hidden">
-            <div class="flex justify-between items-center mb-4">
-                <span class="text-xs font-bold uppercase tracking-widest">Live Metrics</span>
-                <span id="statusBadge" class="bg-green-900/50 text-green-400 text-[10px] px-2 py-1 rounded border border-green-500/50 animate-pulse">RUNNING</span>
-            </div>
+        try {
+            // Start the test
+            await fetch(`${API_BASE}/start?ip=${ip}&port=${port}&players=${players}&duration=${duration}`);
             
-            <div class="grid grid-cols-2 gap-4 text-center">
-                <div class="bg-black/40 p-4 rounded-xl border border-gray-800">
-                    <p class="text-[10px] text-gray-500">PACKETS SENT</p>
-                    <p id="totalSent" class="text-2xl font-bold text-white neon-text">0</p>
-                </div>
-                <div class="bg-black/40 p-4 rounded-xl border border-gray-800">
-                    <p class="text-[10px] text-gray-500">AVG SPEED</p>
-                    <p id="pps" class="text-2xl font-bold text-white">0 <span class="text-xs text-gray-500">p/s</span></p>
-                </div>
-            </div>
+            let startTime = Date.now();
+            let totalSeconds = parseInt(duration);
 
-            <div class="mt-6">
-                <div class="flex justify-between text-[10px] mb-1">
-                    <span>PROGRESS</span>
-                    <span id="progressText">0%</span>
-                </div>
-                <div class="w-full bg-gray-800 rounded-full h-1.5">
-                    <div id="progressBar" class="bg-green-500 h-1.5 rounded-full progress-bar" style="width: 0%"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const API_BASE = "https://bagmi.onrender.com";
-        let lastSent = 0;
-        let timer = null;
-
-        async function startTest() {
-            const ip = document.getElementById('ip').value;
-            const port = document.getElementById('port').value;
-            const players = document.getElementById('players').value;
-            const duration = document.getElementById('duration').value;
-
-            if(!ip || !port) return alert("Missing Parameters!");
-
-            // Show Stats Panel
-            document.getElementById('statsPanel').classList.remove('hidden');
-            document.getElementById('launchBtn').disabled = true;
-            document.getElementById('launchBtn').classList.add('opacity-50');
-
-            try {
-                await fetch(`${API_BASE}/start?ip=${ip}&port=${port}&players=${players}&duration=${duration}`);
-                
-                let startTime = Date.now();
-                let endTime = startTime + (duration * 1000);
-
-                if(timer) clearInterval(timer);
-                
-                timer = setInterval(async () => {
-                    const now = Date.now();
+            if(timer) clearInterval(timer);
+            
+            timer = setInterval(async () => {
+                try {
                     const res = await fetch(`${API_BASE}/status`);
                     const data = await res.json();
 
-                    // Calculate Stats
                     const currentSent = data.sent;
                     const pps = (currentSent - lastSent);
-                    const progress = Math.min(100, ((now - startTime) / (duration * 1000)) * 100);
+                    
+                    // Progress Calculation
+                    let elapsed = (Date.now() - startTime) / 1000;
+                    let progress = Math.min(100, (elapsed / totalSeconds) * 100);
 
-                    // Update UI
+                    // Update UI elements
                     document.getElementById('totalSent').innerText = currentSent.toLocaleString();
-                    document.getElementById('pps').innerText = pps > 0 ? pps : 0;
+                    document.getElementById('pps').innerText = pps > 0 ? pps.toLocaleString() : "0";
                     document.getElementById('progressBar').style.width = progress + "%";
                     document.getElementById('progressText').innerText = Math.round(progress) + "%";
                     
                     lastSent = currentSent;
 
-                    if (now >= endTime || data.status === 'finished') {
+                    // Stop condition
+                    if (data.status === 'finished' || progress >= 100) {
                         clearInterval(timer);
-                        document.getElementById('statusBadge').innerText = "COMPLETED";
-                        document.getElementById('statusBadge').classList.replace('text-green-400', 'text-blue-400');
-                        document.getElementById('launchBtn').disabled = false;
-                        document.getElementById('launchBtn').classList.remove('opacity-50');
+                        finishUI();
                     }
-                }, 1000);
+                } catch (e) {
+                    console.log("Polling error...");
+                }
+            }, 1000);
 
-            } catch (err) {
-                alert("Backend not responding. Check Render logs.");
-            }
+        } catch (err) {
+            alert("Connection to Backend Failed!");
+            resetUI();
         }
-    </script>
-</body>
-</html>
+    }
+
+    function finishUI() {
+        document.getElementById('statusBadge').innerText = "COMPLETED";
+        document.getElementById('statusBadge').className = "bg-blue-900/50 text-blue-400 text-[10px] px-2 py-1 rounded border border-blue-500/50";
+        document.getElementById('launchBtn').disabled = false;
+        document.getElementById('launchBtn').innerText = "LAUNCH SEQUENCE";
+        document.getElementById('progressBar').style.width = "100%";
+        document.getElementById('progressText').innerText = "100%";
+    }
+
+    function resetUI() {
+        document.getElementById('launchBtn').disabled = false;
+        document.getElementById('launchBtn').innerText = "LAUNCH SEQUENCE";
+    }
+</script>
